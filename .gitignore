@@ -1,0 +1,19 @@
+# KerayeGo workspace repo: shared Claude rules (CLAUDE.md), cross-app docs (docs/),
+# PROVIDER_APP_PLAN.md and AUDIT_2026-10-28.md.
+# Each app is its own git repository, cloned into this folder under exactly these names
+# (docs/DEVELOPMENT_WORKFLOW.md → "Working as a team"):
+/kerayego-backend/
+/kerayego-web/
+/kerayego-mobile/
+/kerayego-partner/
+
+# Personal tool and editor state
+/.playwright-mcp/
+/.vscode/
+.claude/settings.local.json
+.DS_Store
+Thumbs.db
+
+# Secrets never go in git
+.env
+.env.*
