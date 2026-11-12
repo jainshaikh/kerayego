@@ -313,6 +313,21 @@ The provider app must cover everything the website provider portal does today
 | A71 | **Only the driver starts and ends a trip — final.** The assigned driver taps Start and End in KerayeGo Partner. Business admins and managers accept (or decline) bookings, cancel them before the job starts, assign, change and remove the driver, and can send the driver a reminder about a booking — but never start or end a trip. | 2026-11-09 |
 | A72 | **A driver sees only the pickup and drop-off places, never a customer's or rider's location on a map.** Replaces the driver side of A63. (Owner: the earlier instruction to show riders' locations to the driver was a mistake.) | 2026-11-09 |
 | A73 | **Business admins and managers see only their drivers' locations on the map**, never customers' or passengers' locations. | 2026-11-09 |
+| A74 | **Hour packages are never multiplied.** 6 hours and 12 hours are single packages — no "6 hours × 2" (two 12-hour blocks are really a day). Only days take a count, and the apps name the count by its unit ("Number of days"), never "quantity". Weeks and months: A79. Spec: §3c. | 2026-11-11 |
+| A75 | **Every rental request has a pickup and a drop-off**, each picked from search or on the map, and may have several pickups and several drop-offs. Spec: §3c. | 2026-11-11 |
+| A76 | **Every rental request is One way or Round trip.** One way: the driver picks up at the pickup points and drops off at the drop-off points. Round trip: after the drop-off the driver brings the customer back. Spec: §3c. | 2026-11-11 |
+| A77 | **The route must fit the package.** KerayeGo works out the route's driving distance and time with Google. If the trip can't fit in the chosen package it can't be sent, and the app suggests the smallest package that fits (owner's example: 6 hours from Hyderabad to Larkana → choose 12 hours). Rule details: A80, A81. Spec: §3c. | 2026-11-11 |
+| A78 | **The business gets the estimate with every request** — the route's kilometres and driving time — so it knows the ride's real timing. Spec: §3c. | 2026-11-11 |
+| A79 | **Weekly and monthly rentals have no price in the apps.** Too much varies (maintenance and other terms), and talking to each other is better for the platform: the customer sends a request with no price — "price to agree" — and the business calls them to agree it. Customers no longer see week or month prices and businesses no longer enter them; the owner may remove those packages later. Days: 1–6 at the car's day price; 7 days or more is a week or month request. (Closes D19.) | 2026-11-11 |
+| A80 | **Fit rule:** time needed = Google's driving time + 15 minutes for each stop after the first + a 30-minute break for every full 4 hours of driving. A 6- or 12-hour package fits when the time needed is within it; a day package fits with at most 10 hours of driving per booked day. (Closes D20.) | 2026-11-11 |
+| A81 | **One way: the driver's drive back doesn't count** toward the fit — only the customer's route does. The business sees the drive back (kilometres and time) on the request and decides. (Closes D21.) | 2026-11-11 |
+| A82 | **The website's customer rental booking form is switched off now** — the car page tells customers to send the request in the KerayeGo app. The web business portal stays (A69). (Closes D22.) | 2026-11-11 |
+| A83 | **Every rental request has a passengers count** (1 to the car's seats), which the business and the driver see. The other market ideas in §3c stay for later. (Closes D23.) | 2026-11-11 |
+| A84 | **Weekly and monthly rentals have their own place**, apart from hourly and daily rentals: the customer app has "Hourly & daily" and "Weekly & monthly" sections, and the website a weekly & monthly page per city (no prices; the request is sent in the app). The business switches a car on for weekly & monthly rental with one switch, which replaces the week and month prices. A car can be in both. Spec: §3c. | 2026-11-11 |
+| A85 | **A weekly or monthly request also asks** the driver's hours per day, the days per week, and roughly how many kilometres per month (optional), so the business can quote. Spec: §3c. | 2026-11-11 |
+| A86 | **The customer sees a driver card** once a driver is assigned: photo, rating, ride count, and "Identity verified" / "Licence verified" — never "safe". Spec: §3d. | 2026-11-11 |
+| A87 | **"This exact car"**: the car page and cards say the customer books this exact car (identified by its plate, A15), with the car's own rating and ride count. Spec: §3d. | 2026-11-11 |
+| A88 | **No double booking:** a business can't accept a request for a car that already has an accepted or in-progress booking at an overlapping time. Spec: §3d. | 2026-11-11 |
 
 ---
 
@@ -411,6 +426,226 @@ services, city/area, rates.
 **Phase H (later) — driver hire marketplace:** customers search and filter drivers in the customer app, book
 by hour/day/week/month, the driver accepts, the job runs with live tracking like rental jobs, both sides rate
 each other. Payment directly to the driver (A57).
+
+---
+
+## 3c. Rental booking redesign (A74–A78)
+
+**Status:** every choice made (A74–A85). Build: Phase 8 (Section 7). **Backend built 2026-11-11** (order
+step 1 — accepts the old and the new request shape; see `kerayego-backend/docs/ARCHITECTURE.md` §11.3 and
+root `docs/API_CONTRACTS.md` "Rental booking redesign"). **Partner built 2026-11-11** (order step 2, its
+half — not yet tried on a device or against a live backend). **Customer app built 2026-11-12** (order step
+3 — sends only the new shape; not yet tried on a device or against a live backend; no per-stop note yet).
+**Web built 2026-11-12** (its whole part — the booking form off, the portal and driver jobs, the
+customer dashboard, public pages, the weekly & monthly city pages; reads every new field as optional, so
+it also runs on the old backend; tried against a local mock of the new shapes, not a live backend).
+
+**Today (checked in the code 2026-11-11)**
+- **Backend:** a request stores a package (`durationType`: 6 hours, 12 hours, day, week, month) and a count
+  (`durationQuantity`) that any package can take, with no upper limit; the return time and the total (the
+  car's price × the count) are worked out from them. Pickup and drop-off are optional free text
+  (`pickupLocation`, `pickupCity`, `dropoffLocation`, `dropoffCity`), never checked, with no coordinates;
+  `isOneWay` defaults to false. Nothing checks that the pickup time is in the future, or that two requests
+  for the same car overlap. Google routing (`GeoService.computeRouteDistanceDuration`) goes from one point to
+  one point only — no stops, no traffic, no timeout, and a network failure isn't caught; carpool trips store
+  its result (`distanceKm`, `durationMinutes`).
+- **Customer app:** a "Quantity" stepper for every package; the pickup is optional free text (the
+  coordinates its search and map picker find are thrown away); no drop-off, no one way. After sending, the
+  request shows only its dates and the car's day rate.
+- **Website customer form:** the same, with a plain-text pickup.
+- **Partner and the web portal:** the duration reads "2 12-hour blocks". Partner's business screens show
+  the pickup text but no drop-off (the web shows the drop-off on one-way requests); a driver sees one pickup
+  and one drop-off.
+
+**How it will work**
+
+*Packages and the count (A74, A79)*
+- **Priced packages** (the car's own prices): 6 hours and 12 hours with no count, and Day with "Number of
+  days", 1–6.
+- **Week and Month — "price to agree" (A79):** the customer picks Week ("Number of weeks", 1–4) or Month
+  ("Number of months", 1–12), the start, pickup and drop-off points (where the rental starts and where the
+  car is handed back) and the passengers, and sends it with no price. No trip type and no fit check — a
+  week of driving can't be checked. The business calls the customer (it already sees their phone) and can
+  write the agreed price in its note when it accepts; the app stores no price. Choosing 7 or more days
+  points the customer to Week or Month.
+- Week and month prices disappear: the fleet forms stop asking for them, and listings stop showing them
+  (the backend stops sending them). The database columns stay until the owner decides whether to remove
+  those packages.
+- **A place of their own (A84):** the customer app's browse has two sections, "Hourly & daily" (cars with
+  their prices) and "Weekly & monthly" (cars the business switched on, each showing "Price to agree" and an
+  "Ask for a price" button that opens the request). The website gets a weekly & monthly page per city, with
+  no prices, sending customers to the app. A car can be in both.
+- **What a weekly or monthly request asks (A85):** start, Week or Month and how many, pickup and drop-off
+  points, passengers, the driver's hours per day, the days per week, and roughly how many kilometres per
+  month (optional).
+- **Passengers (A83):** every request asks how many people, 1 to the car's seats.
+- Wording everywhere: "6 hours", "12 hours", "3 days", "1 week — price to agree". The word "quantity"
+  disappears from every app. The API field keeps its name (`durationQuantity`): renaming it would touch every app for nothing the
+  user sees — revisit with generated types (D10).
+- Old requests with an hour package × 2 still show, as "6 hours × 2".
+
+*Pickups, drop-offs and trip type (A75, A76)*
+- The customer adds **pickup points** (at least one) and **drop-off points** (at least one), each found by
+  search or placed on the map — coordinates are required — with an optional note per stop ("gate 2, white
+  house"). Up to 10 stops in all.
+- The driver goes through the pickups in order, then the drop-offs in order — the same shape as carpool
+  trips. Mixing them (pick up, drop off, pick up again) isn't supported in this version.
+- **One way:** the route ends at the last drop-off.
+- **Round trip:** after the last drop-off the car waits, then brings everyone back to the pickup points in
+  reverse order. The time at the destination is whatever the package leaves after both drives, and the
+  customer sees it ("about 3 h at Larkana").
+
+*Estimate and fit check (A77)*
+- The backend asks Google for one route through every stop (round trip: including the way back) and gets
+  the total kilometres and driving time, and each leg's. No live traffic: bookings are hours or days ahead,
+  where Google uses typical traffic anyway, and it keeps the cheaper price tier.
+- **Time needed (A80)** = driving time + 15 minutes for each stop after the first + a 30-minute break for
+  every full 4 hours of driving. A 6- or 12-hour package fits when the time needed is within it; a day
+  package fits with at most 10 hours of driving per booked day. For one way, the driver's drive back doesn't
+  count (A81). Week and month requests aren't checked (A79).
+- **Doesn't fit:** the request can't be sent. The app names the smallest package the car offers that fits,
+  with the number of days if needed — "This trip needs about 7 h 10 m (330 km). Choose 12 hours." — with a
+  button that switches to it. If none of the car's packages fits: "This trip is too long for this car's
+  packages."
+- **Before sending**, the customer sees the kilometres, the driving time, the end time and (round trip) the
+  time at the destination. The app asks for this estimate once every stop has a place, and again when a stop,
+  the date or the package changes. On sending, the backend works it out again — it never trusts the app's
+  numbers.
+
+*What the business and the driver see (A78)*
+- **Booking card:** the trip type, the passengers and the route in one line: "Hyderabad → Larkana · 330 km
+  · ~5 h 30 m". A week or month request shows "Price to agree — call the customer" instead of a total.
+- **Booking detail — a Route section:** every stop in order with its estimated time (pickup time + driving +
+  stop allowance); total kilometres and driving time; how it fits ("12 hours — about 4 h 50 m to spare"); the
+  drive from the car's showroom to the first pickup and, for one way, the driver's drive back to the showroom
+  (to the first pickup when the showroom has no map position). The stops on a small map — places only; A72
+  and A73 are unchanged.
+- **New-request push:** adds the route: "Corolla · 12 hours · Hyderabad → Larkana · 330 km".
+- **Driver job:** every stop with its Map button and estimated time, plus one "Directions" button that opens
+  Google Maps with all the stops.
+
+**Changes by app** (backend first — root `CLAUDE.md`)
+
+- **Backend**
+  - Database: a new `BookingStop` table (request, pickup or drop-off, order, place text, coordinates, city,
+    note, the leg's kilometres and minutes from the previous stop). On `BookingRequest`: `tripType` (One way /
+    Round trip), the route's kilometres and driving minutes, the showroom-to-first-pickup and drive-back legs.
+    `isOneWay`, `pickupLocation`/`pickupCity` and `dropoffLocation`/`dropoffCity` stay, filled by the server
+    from the first pickup and the last drop-off, so the return-trip template (A48), WhatsApp
+    `kg_job_assigned` and older screens keep working. Old requests keep empty route fields.
+  - Google: a route call through a list of stops, returning each leg, with a timeout and network failures
+    caught.
+  - Rules in their own tested files: which packages take a count and its limits, the return time and the
+    total (moved out of the service); the time needed, the fit, the smallest package that fits, and the stop
+    times.
+  - `POST /booking-requests/estimate` (signed in, rate-limited): car, pickup time, trip type and stops → the
+    route, the fit for each package the car offers, and the suggestion.
+  - `POST /booking-requests`: takes the trip type and the stops; checks that the pickup time is in the
+    future, the count rules, at least one pickup and one drop-off with coordinates, and at most 10 stops;
+    works out the route and refuses one that doesn't fit with `ROUTE_DOES_NOT_FIT` and the suggested package.
+    It accepts the old request shape until the customer app sends the new one (the website's form is off,
+    A82), then refuses it with "Please update the app" (testing phase).
+  - The business, customer and driver responses include the stops and the route. `PATCH
+    /booking-requests/:id/status` stops accepting pickup and drop-off edits (they'd leave the route out of
+    date).
+  - Week and month (A79): no total price, no trip type, no fit check; the counts' limits (days 1–6, weeks
+    1–4, months 1–12). Public vehicle and listing responses stop sending week and month prices; the fleet
+    create/update stops taking them.
+  - Weekly & monthly (A84, A85): a vehicle switch (offered for weekly & monthly rental) in the fleet
+    create/update and the listings, a listings filter for it, and the request's driver hours per day, days
+    per week and kilometres per month.
+  - Passengers (A83): a required `passengerCount`, 1 to the car's `seatingCapacity`, in every response.
+  - Docs: backend §0, §11.3, §18, §27; root `docs/API_CONTRACTS.md`.
+- **Customer app (`kerayego-mobile`)**
+  - The request sheet: package choice (Week and Month marked "Price to agree"), the count only where it
+    applies, One way / Round trip, pickup and drop-off points (reusing the carpool stop list and location
+    field, keeping the coordinates), passengers, the estimate panel with the fit or the suggested-package
+    button, then Send. The car page stops showing week and month prices.
+  - Browse: the "Hourly & daily" and "Weekly & monthly" sections (A84); the weekly & monthly request with
+    hours per day, days per week and kilometres per month (A85).
+  - The request detail: package, trip type, stops and estimate (today: dates and the day rate only). Tests
+    for the new helpers; mobile docs.
+- **KerayeGo Partner**
+  - Types; the duration wording ("6 hours", "3 days", "1 week — price to agree"; old "× 2" kept); the
+    booking card's route line, passengers and "Price to agree — call the customer"; the Route section; the
+    driver job's stops, times, passengers and Directions; the fleet form drops the week and month prices
+    for the weekly & monthly switch (A84); a weekly or monthly request shows the hours per day, days per
+    week and kilometres per month (A85); tests; docs.
+- **Website (`kerayego-web`)**
+  - **Now, on its own (A82):** switch off the customer booking form — the car page says to send the request
+    in the KerayeGo app. Seat requests and customer sign-in stay for now.
+  - Business portal and driver pages: the same as Partner (A69), including the fleet form's weekly &
+    monthly switch. Customer dashboard: package and route. Public car pages stop showing week and month
+    prices; check the copy that quotes them (`guides/monthly-vs-daily-car-rental`, the price index).
+  - A weekly & monthly page per city (A84): no prices, linked from the city pages and the rewritten
+    monthly-vs-daily guide; add it to `docs/SEO_ROADMAP.md` when it ships.
+
+**Order:** (0) the web booking form off — any time → (1) backend, accepting old and new requests → (2)
+Partner and the web portal show the new details (old requests still show) → (3) the customer app sends the
+new shape → (4) the backend refuses the old shape.
+
+**Ideas from the market (research 2026-11-11) — passengers agreed (A83); the rest for later**
+
+No product we found checks whether a route fits the package — they only keep hourly hire inside one city —
+so A77 is something competitors don't have. Ranked:
+1. **Passengers (and bags)** on every request, checked against the car's seats.
+2. **A note and a contact person per stop** — for picking up someone else.
+3. **Airport pickup:** ask for the flight number when a stop is an airport.
+4. **Overlap warning:** the business sees when the same car already has an accepted booking at that time
+   (nothing checks this today).
+5. **"Night driving" badge** when the route runs between 10 PM and 6 AM (information only, no price).
+6. **Changes go through the app:** the customer asks to change the time or the stops, the business approves
+   and the route is checked again; side deals with the driver don't change the booking.
+7. **The business suggests another package or time** when it can't take the request, instead of only
+   declining.
+8. **"Best stop order" button:** Google reorders the stops (a dearer call, only when tapped).
+9. **Cancellation and change window** shown on the request — needs an owner policy first.
+
+Not recommended now: kilometre allowances per package ("12 hours / 120 km") and extra-kilometre or
+extra-hour charges — new pricing terms, which aren't modelled (root `CLAUDE.md`); listing a driver allowance
+or the driver's lodging — that says what the driver costs (owner rule).
+
+---
+
+## 3d. Early trust features (A86–A88)
+
+**Status:** agreed 2026-11-11; **backend built 2026-11-11** (driver card, car rating on listings, no double
+booking); Partner shows the double-booking warning (2026-11-11); the customer app shows the driver card and
+"This exact car" with the car's rating and rides (2026-11-12; "Plate checked by KerayeGo" not yet — the
+listing doesn't say); the web shows all three — the driver card on the customer's requests, "This exact
+car" with the car's rating and rides, the double-booking warning in the business portal (2026-11-12; no
+plate check yet either). Picked from the owner's "KerayeGo — Rental With Driver Product
+Reference" (a long-term vision document, not in the repo); its triage is at the end of this section.
+
+**Today (checked in the code 2026-11-11):** after a booking is accepted the customer app shows the driver's
+name and phone only (`upcomingRentalDriver`); the backend already sends the driver's photo
+(`driverProfile.avatarUrl`), which the app doesn't show, and driver reviews exist (A19, A24). Every listing
+is one exact car identified by its plate (A15), with its rating and ride count on the car's register (A17).
+Nothing stops a business accepting two bookings for the same car at the same time (a driver can't be given
+overlapping jobs — `driver-assignment.service.ts` — but the car has no such check).
+
+- **Driver card (A86):** the customer's booking response gets the assigned driver's photo, rating and review
+  count, ride count, and whether KerayeGo verified their identity and licence. The customer app shows it on
+  the booking once a driver is assigned (with the call and WhatsApp buttons it has today); the web customer
+  dashboard shows the same while it exists. Wording: "Identity verified", "Licence verified" — never "safe".
+- **This exact car (A87):** the car page and the listing cards say "This exact car" — and "Plate checked by
+  KerayeGo" once admin has checked it (A15) — with the car's own rating and ride count. Listing responses
+  need the rating and ride count. Customer app and the website's public pages.
+- **No double booking (A88):** accepting a request (or moving it to Accepted any other way) is refused when
+  the same car has an Accepted or In-progress booking whose pickup-to-return period overlaps, with the
+  clashing booking's times in the error. Partner and the web portal warn on the request before Accept ("This
+  car is booked 10:00–22:00 that day"). Customers can still send a request; the business decides.
+
+**The rest of the reference document (owner's triage 2026-11-11)**
+- **Later:** luggage (bags on the car and the request); a Start PIN the customer gives the driver (declined
+  for now); online payment, refunds and cancellation percentages; booking extensions; replacement guarantee
+  and a "Trip Guarantee" badge; several businesses quoting one weekly or monthly request; wedding and event
+  fleets; corporate accounts; northern-areas trips; flight tracking; driver qualification badges; a business
+  quality score (admin-only first); admin booking views; disputes.
+- **Not adopted, because they clash with agreed rules:** business ratings (A18 — only the car and the driver
+  are rated); price breakdowns with driver meals, night allowance, extra kilometres or overtime (root
+  `CLAUDE.md`: don't say what the driver costs, pricing terms aren't modelled); monthly prices (A79); the
+  business marking a trip started or completed (A71); a currency choice (every price is PKR).
 
 ---
 
@@ -780,6 +1015,17 @@ to a rental business from also posting it for carpool themselves. Admin handles 
 - **Limit:** blocking by CNIC only catches people who uploaded one (drivers, carpool drivers, business
   owners). Customers who never upload a CNIC can only be matched by phone and email.
 
+### Rental booking redesign (D19–D23)
+
+**All closed 2026-11-11** (the proposals are in §3c and the changelog):
+- **D19. Do weeks and months take a count?** → **A79.** The owner went further: weeks and months have no
+  price at all — a "price to agree" request the business discusses with the customer; days 1–6.
+- **D20. How much time a package must leave beyond driving** → **A80** (stops + breaks, at most 10 h of
+  driving per day).
+- **D21. One way: does the driver's drive back count?** → **A81** (no; the business sees it).
+- **D22. The website's customer booking form** → **A82** (switched off now).
+- **D23. Which market ideas go in now** → **A83** (passengers only; the rest later).
+
 ---
 
 ## 5. Things the build must handle (not choices)
@@ -879,6 +1125,8 @@ follows the "Before considering a feature complete" checklist in the root [CLAUD
 | 5. Admin | Admin on its own subdomain; look up one vehicle's current or last known location (A39); per-business summaries (A31) | D12 (subdomain move can happen in parallel any time) |
 | 6. Return trips | Booking drop-off city / one-way; carpool trip can use a fleet car and shows its business; return trip allowed only after a job with that car ending in that city; pre-filled return trip when a driver ends a one-way job | A48 |
 | 7. Later | Customer sees their driver arriving; switch off the website provider portal; business admins and managers join ride/trip chats and accept seat requests (A50) | D8, D11 |
+| 8. Rental booking redesign | Hour packages never multiplied, "Number of days"; pickups and drop-offs with coordinates; One way / Round trip; Google route estimate and fit check with a suggested package; the estimate shown to the business and the driver — backend → Partner + web portal → customer app → old shape refused; weekly & monthly section and city pages (§3c) | A74–A85 (all agreed) |
+| 9. Early trust features | Driver card for the customer; "This exact car" with the car's rating and rides; no double booking of a car (§3d) — backend first, any time | A86–A88 (all agreed) |
 | Any time after Phase 0 | SMS/WhatsApp OTP: phone becomes the first login option, email the backup; unique verified phone numbers; team invites by phone | When message costs are acceptable (A5, A11) |
 
 ---
@@ -1030,3 +1278,79 @@ follows the "Before considering a feature complete" checklist in the root [CLAUD
   the same sentence is still in its Accept copy (`src/features/booking-requests/statusAction.ts`), next to
   its own Cancel button; backend — the web-side half of the A71 ripple is done, the backend's (refuse a
   PROVIDER's move to IN_PROGRESS/COMPLETED, reminder endpoint) is still open.
+- **2026-11-11** (jainshaikh) — **Partner push fixed** (a test booking gave the business no notification).
+  Two blockers: the app skipped registering its push token on an Android emulator (`pushToken.ts` had a
+  "physical device only" check that kerayego-mobile doesn't have — removed), and its own `kerayego-partner`
+  Firebase project gave the backend's Cloud Run service account no rights. The Partner app moved to
+  `rentalmarketplave`, the customer app's project (new `google-services.json`, app rebuilt), and the backend
+  now sends every token through one firebase-admin app (deployed 2026-11-11). Confirmed working on the device.
+- **2026-11-11** (jainshaikh) — Agreed **A74–A78**, the rental booking redesign: hour packages are never
+  multiplied and the count is "Number of days", not "quantity"; every request has pickups and drop-offs
+  (several allowed); One way or Round trip; the route must fit the package (Google kilometres and time, the
+  smallest fitting package suggested); the business gets the estimate. New §3c (today's code, the design,
+  changes per app, order, market research), open D19–D23, build plan Phase 8. Nothing built yet.
+- **2026-11-11** (jainshaikh) — Closed D19–D23 → **A79** (weekly and monthly rentals have no price: a "price
+  to agree" request, the business calls the customer; week and month prices no longer shown or entered;
+  days 1–6 at the day price), **A80** (fit rule: driving + 15 min per extra stop + 30 min per 4 h of
+  driving; at most 10 h of driving per day), **A81** (one way: the drive back doesn't count), **A82** (the
+  website's customer booking form off now), **A83** (passengers on every request). §3c updated; Phase 8 has
+  no open decisions. A79 and A82 also added to the root `CLAUDE.md` product rules.
+- **2026-11-11** (jainshaikh) — From the owner's "Rental With Driver Product Reference": agreed **A84**
+  (weekly & monthly rentals get their own app section and website city pages; one switch per car replaces
+  the week and month prices), **A85** (a weekly or monthly request asks hours per day, days per week and
+  kilometres per month), **A86** (driver card for the customer), **A87** ("This exact car"), **A88** (no
+  double booking of a car). New §3d with the document's triage (later / not adopted); Start PIN and luggage
+  later. Build plan Phase 9.
+- **2026-11-11** (jainshaikh) — **Partner, first A74 step (no backend change needed):** durations read
+  "6 hours", "12 hours", "3 days", "1 week" (an old hour request with a count: "6 hours × 2") —
+  `durationLabel`; the business booking card shows where it goes ("Hyderabad → Larkana") and the detail shows
+  the drop-off (always on a one-way request), from fields the backend already sends; the Accept sheet no
+  longer says "Once accepted, only KerayeGo can change this request" (A71 — the 2026-11-10 ripple). 719 tests
+  pass. **Ripple for the web chat:** `lib/ops/bookingDisplay.ts` `durationLabel` and the customer dashboard's
+  `formatDurationLabel` still say "2 12-hour blocks"; the web booking card has no places line.
+- **2026-11-11** (jainshaikh) — Built the backend of §3c/§3d (A74–A88, Phase 8 order step 1): booking stops,
+  trip type, the Google route through every stop with each leg, the fit check (A80, A81) with the smallest
+  fitting package, expected stop times, passengers, weekly & monthly as "price to agree" with the car
+  switch (A84, A85), `POST /booking-requests/estimate`, no double booking (A88), the customer's driver card
+  (A86) and each listing's rating and rides (A87). The old request shape is still accepted. Next: Partner
+  and the web portal show the new details, then the customer app sends the new shape (what each needs:
+  root `docs/API_CONTRACTS.md` "Rental booking redesign").
+- **2026-11-11** (jainshaikh) — **Partner, Phase 8 step 2 and A88:** types for the new booking and job fields
+  (`BookingStop`, `BookingTripType`, `TripStopType`, `CarClash`, the route fields); the booking card shows
+  "Hyderabad → Larkana · 330 km" (round trip, stop count), passengers and "Price to agree"; the detail shows
+  trip type, passengers, a week/month request's hours a day / days a week / km a month, "Price: To agree —
+  call the customer", and a Route section (stops in route order with expected times, notes and legs; distance,
+  driving, time needed, time to spare, way back, showroom → first pickup, drive back); "This car is already
+  booked" from `carClashes` on the detail and in the Accept sheet, and the `VEHICLE_ALREADY_BOOKED` message;
+  the driver's job shows its package, trip, passengers, stops with times, "Map" by coordinates and
+  "Directions for the whole route"; the fleet form has the weekly & monthly switch instead of the two prices.
+  `normalizeApiError` no longer mistakes an object `error.details` for field errors. 760 tests pass. **This
+  Partner build needs the backend's redesign on production first** (the fleet form sends
+  `offersWeeklyMonthly`). Not yet tried on a device.
+- **2026-11-12** (jainshaikh) — **Customer app, Phase 8 step 3 (A74–A87):** the request sheet ("Request this
+  car") — package chips (6 h / 12 h / Days, plus Week and Month "Price to agree" on cars switched on for
+  it), the count only where it applies (days 1–6, weeks 1–4, months 1–12), One way / Round trip, pickup
+  and drop-off points picked by search or map (the carpool stop list, ≤ 10 in all), passengers (≤ seats),
+  a weekly or monthly request's hours a day / days a week / km a month, and the route estimate from
+  `/booking-requests/estimate` with "Choose 12 hours" — it can't be sent while the package doesn't fit. It
+  sends **only the new request shape** (the first pickup's and last drop-off's `city` looked up on send)
+  and handles `ROUTE_DOES_NOT_FIT`, `START_TIME_PAST`, `ROUTE_UNAVAILABLE`. Browse has "Hourly & daily" and
+  "Weekly & monthly" sections (A84); no week/month prices anywhere (A79); cards and the car page say "This
+  exact car" with the car's rating and rides (A87). The booking detail shows the package, trip type,
+  passengers, times, total or "Price to agree", the Route (stops with expected times, km, driving time) and
+  the driver card (A86). 1,023 tests pass (the hanging `offlineSync.test.ts` aside). Not built: a note per
+  stop, "Plate checked by KerayeGo". **Needs the backend's redesign on production first** (the estimate
+  endpoint, `weeklyMonthly`); not yet tried on a device. Once it ships, the backend can refuse the old
+  shape (order step 4).
+- **2026-11-12** (jainshaikh) — **Web built (plan §3c/§3d, A74–A88, order steps 0 and 2):** the customer
+  booking form is off (A82 — the car page sends customers to the app; `/inquire` redirects to the car
+  page); the business portal and driver jobs match Partner (route line and Route section, passengers,
+  "6 hours" / "3 days" / "1 week" wording, "Price to agree", weekly/monthly hours/days/km, the
+  double-booking warning and `VEHICLE_ALREADY_BOOKED` message, driver jobs' stops with "Map" and
+  "Directions", the fleet form's weekly & monthly switch); the customer dashboard shows the package,
+  route and driver card (A86); public pages show no week/month prices, show "This exact car" with the
+  car's rating (A87), and each city has a weekly & monthly page (A84) linked from the city page and the
+  rewritten monthly-vs-daily guide. The web's own driver-side parity gap "no Map directions" is closed.
+  Not deployed; needs the backend's 2026-11-11 changes on production to show the new data (until then it
+  behaves as before). No new decisions. **Not built anywhere yet:** "Plate checked by KerayeGo" (A87), a
+  map of the stops in the business Route section.

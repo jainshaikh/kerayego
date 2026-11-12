@@ -283,7 +283,8 @@ to both.
 ## Push payload: Android vs iPhone (2026-11-09)
 
 Every push goes through `PushNotificationService.sendToUser` (`kerayego-backend/src/modules/notifications/`),
-one FCM `sendEachForMulticast` per app (customer / Partner). Each message carries:
+one FCM `sendEachForMulticast` for all of the user's FCM tokens (both apps share the `rentalmarketplave`
+Firebase project since 2026-11-11), plus a direct APNs send for iPhone tokens. Each FCM message carries:
 
 | Block | For | Contents |
 |---|---|---|
@@ -614,6 +615,92 @@ app versions. All three endpoints are `@Public()` (no JWT, no WhatsApp gate).
   emailed cancel link, and any sign-in restore `ACTIVE` when `emailVerified` **or** `phoneVerifiedAt` is
   set (before: `PENDING_VERIFICATION` for every unconfirmed email, which hid a phone-created business from
   public pages).
+
+## Rental booking redesign (2026-11-11, plan §3c/§3d, A74–A88)
+
+**Backend done; KerayeGo Partner updated 2026-11-11** (needs this backend on production first — its fleet
+form sends `offersWeeklyMonthly`); **the customer app updated 2026-11-12** (sends only the new shape — same
+condition); **the website updated 2026-11-12** (reads every new field as optional, so it also runs on the
+old backend). Exact shapes: `/api/docs`. Rules and behaviour:
+`kerayego-backend/docs/ARCHITECTURE.md` §11.3. Every change is additive except the two marked
+**breaking** below.
+
+**Requests**
+- **`POST /booking-requests/estimate`** (signed in, 20/min) `{ vehicleId, requestedFromDate, tripType,
+  stops[2–10], durationType?, durationQuantity? }` → `{ vehicleId, tripType, requestedFromDate, route: {
+  distanceKm, drivingMinutes, timeNeededMinutes, wayBack: { distanceKm, durationMinutes } | null, stops[]
+  }, packages[], suggestion, selected }`. `packages[]` / `selected`: `{ durationType, durationQuantity,
+  fits, spareMinutes, endsAt, timeAtDestinationMinutes | null }`; `suggestion`: `{ durationType,
+  durationQuantity } | null` (null = "too long for this car's packages"). Ask again whenever a stop, the
+  date or the package changes. Week/month → 400 (they aren't routed).
+- **`POST /booking-requests` new shape** — send `stops` (each `{ type: PICKUP | DROPOFF, label, lat, lng,
+  city?, note? }`; ≥1 of each, ≤10; coordinates required; send `city` — it fills `pickupCity` /
+  `dropoffCity`, which the return-trip rule uses), `passengerCount` (1 to the car's `seatingCapacity`),
+  and `tripType` (`ONE_WAY` | `ROUND_TRIP`) for 6 h / 12 h / days. Week/month: no `tripType`;
+  `driverHoursPerDay` (1–24) and `daysPerWeek` (1–7) required, `kmPerMonth` optional; `totalPrice` null.
+  `durationQuantity`: omit (or 1) for 6/12 h, days 1–6, weeks 1–4, months 1–12. Don't send the old place
+  fields with `stops` (400 `OLD_REQUEST_SHAPE`).
+- **Old shape still accepted** (no `stops`, free-text `pickupLocation`/`pickupCity`/`isOneWay`/
+  `dropoff*`) until the customer app sends the new one — then refused. The count rules and a future start
+  now apply to it too: **an installed customer app that sends 6 h × 2, 7+ days, a past time, or a week
+  /month on a car not switched on now gets a 400** (testing phase).
+
+**New error codes** (`error.code`, read with each client's error helper): `ROUTE_DOES_NOT_FIT` (400,
+`error.details { suggestion, distanceKm, drivingMinutes, timeNeededMinutes }` — show the message and a
+button that switches to `suggestion`), `START_TIME_PAST` (400), `STOPS_INVALID` (400), `ROUTE_NOT_FOUND`
+(400), `ROUTE_UNAVAILABLE` (503, try again), `OLD_REQUEST_SHAPE` (400), `VEHICLE_ALREADY_BOOKED` (409 on
+accept, `error.details.clashes[] { bookingId, status, requestedFromDate, requestedToDate }`). Coded errors
+can now carry `error.details` (before, only validation errors did).
+
+**Responses**
+- Every booking response (customer, business, `GET /driver/jobs` and the respond/start/end job
+  responses) adds `tripType`, `passengerCount`, `routeDistanceKm`, `routeDurationMinutes`,
+  `wayBackDistanceKm`, `wayBackDurationMinutes`, `timeNeededMinutes`, `driverHoursPerDay`, `daysPerWeek`,
+  `kmPerMonth` and `stops[]` (route order, each with `legDistanceKm`, `legDurationMinutes`, `expectedAt`)
+  — null / `[]` on older requests. The business also gets `approachDistanceKm/DurationMinutes` (showroom →
+  first pickup) and `driveBackDistanceKm/DurationMinutes` (one way: back to the showroom); the customer
+  never does.
+- `GET /booking-requests/:id` for the business / KerayeGo admin adds `carClashes[]` on a PENDING /
+  CONTACTED request (A88 — warn before Accept, which would get `VEHICLE_ALREADY_BOOKED`).
+- The **customer's** booking responses add the driver card to `assignedDriver` (A86): `identityVerified`,
+  `licenceVerified`, `rating { average, count }`, `rideCount`. Word it "Identity verified" / "Licence
+  verified" — never "safe".
+- Listings (`GET /listings`, `/featured`, `/:slug`, saved vehicles' cards): `carRating { averageRating,
+  reviewCount, rideCount }` (A87, the car's own plate-wide figures) and `offersWeeklyMonthly`; **breaking:
+  `pricePerWeek` and `pricePerMonth` are no longer sent** (A79). `GET /listings?weeklyMonthly=true` = the
+  "Weekly & monthly" section (A84).
+- Fleet: `POST/PATCH /vehicles` take `offersWeeklyMonthly`; `pricePerWeek`/`pricePerMonth` are still
+  accepted but never stored (a price turns the switch on). `GET /vehicles/:id` returns the switch.
+- **Breaking: `PATCH /booking-requests/:id/status` refuses `isOneWay`, `pickupCity`, `dropoffCity`,
+  `dropoffLocation`** (400 unknown field). Checked 2026-11-11: no client sends them.
+- New-request push (Partner) body: "Corolla · 12 hours · Hyderabad → Larkana · 330 km — Sara, from 5 Nov
+  2026" (`type`/data unchanged).
+
+**What each client needs** (hand-mirrored types — add the fields above; never rename a push `type`)
+- **KerayeGo Partner — done 2026-11-11** (`kerayego-partner/docs/ARCHITECTURE.md` §10, §11, §14): types for the new booking/job fields, `BookingStop`, `carClashes`, the error codes;
+  duration wording "6 hours", "3 days", "1 week — price to agree" (old rows "6 hours × 2"); the booking
+  card's route line, passengers and "Price to agree — call the customer"; the detail's Route section
+  (stops with `expectedAt`, km, driving time, `timeNeededMinutes` vs the package, approach and drive back);
+  the Accept warning from `carClashes` and the `VEHICLE_ALREADY_BOOKED` message; a weekly/monthly request's
+  hours/day, days/week, km/month; the driver job's stops, times, passengers and a Directions button; the
+  fleet form drops the week/month prices for the `offersWeeklyMonthly` switch.
+- **Customer app (`kerayego-mobile`) — done 2026-11-12** (`kerayego-mobile/docs/ARCHITECTURE.md` §9;
+  sends only the new shape; no per-stop `note` field yet; not yet tried against a backend with these
+  changes). What it covers: the request sheet — package choice (Week/Month "Price to agree"),
+  the count only where it applies, One way / Round trip, pickup and drop-off stops with coordinates (and
+  `city`), passengers, the estimate panel from `/booking-requests/estimate` with the fit or a
+  "Choose 12 hours" button from `suggestion`, then send the new shape; handle `ROUTE_DOES_NOT_FIT` /
+  `START_TIME_PAST` / `ROUTE_UNAVAILABLE`. Browse: "Hourly & daily" and "Weekly & monthly"
+  (`weeklyMonthly=true`) sections; the weekly/monthly request asks hours/day, days/week, km/month. The car
+  page and cards: stop showing week/month prices, show "This exact car" with `carRating`. The booking
+  detail: package, trip type, stops with times, route; the driver card from `assignedDriver`. Once it
+  ships, tell the backend chat so the old shape can be refused.
+- **Website (`kerayego-web`) — done 2026-11-12** (`kerayego-web/docs/ARCHITECTURE.md` §12, §18, §19,
+  §21.6, §23; tried against a local mock of these shapes, not a live backend). What it covers: the business portal and `/driver/*` pages — the same as Partner (A69),
+  incl. the fleet form's switch and `carClashes`. Public car pages and cards: no week/month prices,
+  `carRating` ("This exact car"); check copy that quotes week/month prices (`guides/monthly-vs-daily-car-
+  rental`, the price index). The customer booking form is switched off (A82) — nothing to send. Customer
+  dashboard: package and route. A weekly & monthly page per city using `weeklyMonthly=true` (A84).
 
 ## Pagination metadata — not uniform across the backend's own endpoints
 

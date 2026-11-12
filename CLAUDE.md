@@ -123,12 +123,19 @@ owner changes one; when that happens, update it here.
 - **Every price is PKR** — rental, carpool seats, totals, emails, the price index, in all four apps. The
   `Market` enum (PK/SA/AE) only sets phone codes and city lists; every market's `currencyCode` is
   `'PKR'`. No currency selectors, conversions or "prices in X" wording.
+- **Weekly and monthly rentals have no price** (owner decision 2026-11-11, plan A79). A customer books 6
+  hours, 12 hours or 1–6 days at the car's own prices; a week or a month is a "price to agree" request
+  that the business discusses with the customer. Don't show or ask for week/month prices, and don't write
+  copy or SEO pages that quote them. Weekly & monthly cars are browsed apart from hourly & daily ones (app
+  section, website city pages — A84). Built in every app 2026-11-11/12 (`PROVIDER_APP_PLAN.md` §3c) — not
+  yet deployed.
 - **Carpool is the top priority.** In SEO, content and new pages, cover carpool by default (guides, the
   `/carpool` hub, route pages, links from rental city pages) — never as an afterthought to rental.
 - **Web becomes listings-only for customers.** Customer login, booking and seat requests on web exist
   only for the testing phase and will move to the apps; don't remove them until the owner asks, don't
   polish them beyond keeping them correct, don't hold back backend changes for them, and write public
-  copy that survives their removal. **Exception (plan A69): the web business portal stays** and must do
+  copy that survives their removal. **The rental booking form is the first to go (owner decision
+  2026-11-11, plan A82):** switched off 2026-11-12 — the car page sends customers to the KerayeGo app. **Exception (plan A69): the web business portal stays** and must do
   everything the Partner app does except a driver's on-trip session — that portal is worth investing in.
 - **Every sheet and modal** has a top-right × button and closes on a tap outside it (and on Android
   back). Mobile and Partner: build it on the shared `AppSheet`; web: `kerayego-web/CLAUDE.md` → Dialogs.
@@ -164,15 +171,18 @@ git** — each one's memory and chat history stay on that person's machine. So:
 - **Team rules live in files, never only in memory.** When a developer states a rule meant for the whole
   team (a product decision, a convention, a process), write it here (cross-app) or in that app's
   `CLAUDE.md`. Only personal preferences (e.g. "I commit myself") belong in your own memory.
-- **Start of a task:** `git pull` the workspace repo and every app repo you'll touch, check the GitHub
-  issues for who is working on what, and work on a branch — not `main`.
+- **Start of a task:** `git pull` the workspace repo and every app repo you'll touch and check the GitHub
+  issues for who is working on what. **Work directly on `main` — never create a branch** unless the
+  developer asks for one (owner decision 2026-11-11: we're in the testing phase, pushing to `main` is
+  fine, and per-task branches messed up the repos). Branches and pull requests may come back after the
+  testing phase; only the owner changes this rule.
 - **Changelog lines name their author**: `- **YYYY-MM-DD** (<git user.name>) — …` (older lines have no
   name). On a merge conflict in a changelog or plan doc, keep both sides' entries; for a state line (§0
   counts, switches), re-check the code instead of picking a side.
 - **Don't commit or push unless the developer you're working with asks.** Each developer reviews and
   pushes their own work — and a push to `kerayego-backend`'s `main` deploys to production.
 
-Branches, pull requests, issues, databases, migrations and secrets:
+Working on `main`, issues, databases, migrations and secrets:
 [`docs/DEVELOPMENT_WORKFLOW.md`](docs/DEVELOPMENT_WORKFLOW.md#working-as-a-team).
 
 ## Before considering a feature complete
@@ -181,7 +191,7 @@ Branches, pull requests, issues, databases, migrations and secrets:
    `src/`, `npm test`) and `kerayego-mobile` (Jest with `jest-expo`, `*.test.ts(x)` under `src/`,
    `npm test`). `kerayego-web` has no test suite — say so explicitly rather than silently skipping the
    step. **Known issue (2026-10-27):** mobile's full `npm test` never finishes because
-   `src/features/trips/offlineSync.test.ts` hangs (re-confirmed 2026-11-09); the other 54 files pass — run the files you touched
+   `src/features/trips/offlineSync.test.ts` hangs (re-confirmed 2026-11-09); the other 57 files pass — run the files you touched
    by name (`npx jest <file>`) and report the hang rather than waiting on it. Both suites are unit-level, so also verify behavior by actually running the affected app(s)
    against a live backend — tests, type-checking and linting don't prove the feature works end to end.
 2. **Type-check** the affected app(s) (`npm run type-check` on web and mobile; part of the build step on

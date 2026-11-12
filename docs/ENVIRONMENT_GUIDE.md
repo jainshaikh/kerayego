@@ -29,7 +29,7 @@ variable *names* and *purpose*, sourced from each repo's `.env.example`.
 | `CNIC_HASH_SECRET` (secret) | HMAC key for the one-way CNIC/phone/email hashes (driver identity, person blocks). Unset = falls back to `JWT_REFRESH_SECRET` with a startup warning — set it on Cloud Run before real drivers submit, since hashes stop matching when the key changes. |
 | `SCHEDULER_OIDC_AUDIENCE`, `SCHEDULER_SERVICE_ACCOUNT_EMAIL` | Cloud Scheduler's OIDC token check for `POST /v1/internal/jobs/process-deletions` and `/reminders`. Either unset = those endpoints answer 503. |
 | `THROTTLE_TTL`, `THROTTLE_LIMIT` | Global rate limit: `THROTTLE_TTL` in **seconds** (default 60, multiplied by 1000 for the module) and `THROTTLE_LIMIT` requests per window (default 100). Routes override with `@Throttle`. |
-| `FIREBASE_PROJECT_ID`, `FIREBASE_PARTNER_PROJECT_ID` | Optional Firebase **project ids** (not secrets) for push: customer app default `rentalmarketplave`, Partner app default `kerayego-partner`. Credentials are always Application Default Credentials — never a key file. |
+| `FIREBASE_PROJECT_ID` | Optional Firebase **project id** (not a secret) for push, default `rentalmarketplave` — the one project both apps are in since 2026-11-11. Credentials are always Application Default Credentials — never a key file. `FIREBASE_PARTNER_PROJECT_ID` is **removed** by the 2026-11-11 backend fix (until it's deployed, see "Firebase / push notifications"). |
 | `APNS_AUTH_KEY` (secret), `APNS_KEY_ID`, `APNS_TEAM_ID` | **iPhone push** straight to Apple (both apps register raw APNs tokens on iOS, which FCM rejects). The APNs auth key `.p8` from Apple Developer → Keys (its PEM text, literal `\n` fine, or the file base64-encoded), its 10-character Key ID, and the 10-character Apple Team ID. All three set = APNs on; otherwise iPhone tokens are skipped and **kept** (one startup WARN). One key serves both apps (topics `com.kerayego.app` / `com.kerayego.partner`, picked by the token's `app`) and both environments. Store the key in Secret Manager. **Not set yet (2026-11-09).** |
 | `APNS_ENVIRONMENT` | `production` (default) or `sandbox`. Must match how the iOS builds are signed — both apps' `app.config.js` set `aps-environment: 'production'` (TestFlight / App Store). A token from the other environment gets 400 `BadDeviceToken`, which is logged but never prunes it. |
 | `META_WHATSAPP_ACCESS_TOKEN` (secret), `META_WHATSAPP_PHONE_NUMBER_ID` | WhatsApp Cloud API (Meta) — phone verification codes and WhatsApp notifications. Both set = WhatsApp "configured"; otherwise production answers `POST /users/me/phone/send-code` and `POST /auth/phone/request` with 503 `WHATSAPP_UNAVAILABLE` (200 while `TEST_ACCOUNT_CODE` is on) and other environments only log the code. Production uses the real KerayeGo number +92 310 3810011 (phone number id `1410186272171902`, WABA `1086508217073067`) since 2026-11-09; Meta's test number (`1440981715765133`) is no longer used. |
@@ -163,22 +163,29 @@ files carry explicit warnings not to reuse the backend's unrestricted server key
 ## Firebase / push notifications
 
 **Firebase is used for push notifications only** — nothing else in any app uses it (no Firebase JS
-packages in web or mobile; the backend uses only `firebase-admin/messaging`). There are **two Firebase
-projects** (re-checked 2026-11-09 in `push-notification.service.ts` and the apps' `google-services.json`):
-- the customer app → `rentalmarketplave` (number 155868589460), the same GCP project that runs the
-  backend on Cloud Run;
-- the Partner app → its own `kerayego-partner` project (`kerayego-partner/google-services.json`).
+packages in web or mobile; the backend uses only `firebase-admin/messaging`). Both apps are in **one
+Firebase project**, `rentalmarketplave` (number 155868589460), the same GCP project that runs the backend
+on Cloud Run (checked 2026-11-11 with the Firebase Management API): the customer app as Android
+`com.rentalmobile.app` (see below) and the Partner app as Android `com.kerayego.partner`
+(`kerayego-partner/google-services.json`, added 2026-11-11). Before that the Partner app had its own
+`kerayego-partner` project, where the backend's Cloud Run service account
+(`rental-api-runtime@rentalmarketplave.iam.gserviceaccount.com`) had no role, so no Partner push could be
+sent. That project is no longer used.
 
-The backend initialises one firebase-admin app per project (`FIREBASE_PROJECT_ID` /
-`FIREBASE_PARTNER_PROJECT_ID`, defaulting to those two ids) with Application Default Credentials (Cloud
-Run's own service account, no key file) and picks the project from each device token's `app`. For
-Partner pushes to work, that service account also needs FCM rights ("Firebase Cloud Messaging API
-Admin") in the `kerayego-partner` project — not verified from here.
+**Backend (2026-11-11, deployed the same day — Cloud Run revision `kerayego-backend-00027`):** the
+backend now initialises **one** firebase-admin app (Application Default
+Credentials — Cloud Run's own service account, no key file) for `FIREBASE_PROJECT_ID` (default
+`rentalmarketplave`) and sends every FCM token, customer and Partner, through it in one multicast. The
+second "partner" app and `FIREBASE_PARTNER_PROJECT_ID` are gone — **no variable needs setting**; delete
+`FIREBASE_PARTNER_PROJECT_ID` from Cloud Run / `.env` if it was ever set (it is ignored). A token an old
+Partner build registered in the `kerayego-partner` project gets FCM's "SenderId mismatch" and is deleted
+on the first send; the Partner app registers its new token on the next sign-in or app start after it is
+**rebuilt with the new `google-services.json`** (the file is baked in at build time).
 
 Verified 2026-10-27 (read-only Firebase Management API and `gcloud`):
 
-- The project has **one** Firebase Android app, registered as **`com.rentalmobile.app`** (the customer
-  app's old package name), and **no iOS app**. `kerayego-mobile/google-services.json` was committed with
+- The customer app's Firebase Android app is registered as **`com.rentalmobile.app`** (its old package
+  name); the project's only other app is `com.kerayego.partner` (2026-11-11), and it has **no iOS app**. `kerayego-mobile/google-services.json` was committed with
   that package on 2026-09-12 and **hand-edited** to `com.kerayego.app` when the app was renamed on
   2026-09-16. It keeps working only because the Firebase-created Android API key has no package
   restriction.

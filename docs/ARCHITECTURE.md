@@ -181,18 +181,19 @@ Three separate Google Maps API keys exist across the platform, each scoped to a 
 | Google Cloud Storage (public + private bucket) | Direct (`GcsAdapter`, Cloud Run service account) | — (uploads always go through backend's `/media/upload`; images from `storage.googleapis.com`) | — (same) |
 | Resend (email) | Direct — **only auth emails are sent today**; every other notification email is commented out | — | — |
 | Meta WhatsApp Cloud API | Direct (codes + notifications + webhook; switched off/partly off — see `WHATSAPP_ACTIVATION.md`) | — | — |
-| Firebase Cloud Messaging | Direct (`firebase-admin`, Application Default Credentials; two projects — customer app and Partner app, picked per token's `app`) — Android tokens | — | Registers a **native** FCM/APNs token (not an Expo push token) via `/device-tokens` |
+| Firebase Cloud Messaging | Direct (`firebase-admin`, Application Default Credentials; one project, `rentalmarketplave`, for both apps since 2026-11-11 — one firebase-admin app once the backend fix is deployed) — Android tokens | — | Registers a **native** FCM/APNs token (not an Expo push token) via `/device-tokens` |
 | Apple Push Notification service (APNs) | Direct (`ApnsService`, HTTP/2 + `.p8` token auth) — iPhone tokens (raw APNs, `platform: IOS`); **off until `APNS_*` are set** | — | iPhones register a raw APNs token (both apps) |
 | Google Maps (server key) | Direct; also proxied to clients via `/geo/*` | Only for `/geo/reverse` | For all four `/geo/*` endpoints |
 | Google Maps (client key) | — | Browser key, direct-to-Google for autocomplete/details | Maps-SDK key, tile rendering only |
 | Socket.IO | Hosts `/ride` namespace | Live trip view + chat (`lib/realtime/ride-socket.ts`) | Full consumer (location + chat) |
 
-Firebase (push only) uses **two projects** (re-checked 2026-11-09): the customer app is in
-`rentalmarketplave` (also the GCP project the backend runs in) and the Partner app in its own
-`kerayego-partner` project (`kerayego-partner/google-services.json`); the backend initialises one
-firebase-admin app per project and picks it from each device token's `app`. The customer app's
-registration is out of date: its only Firebase app is Android `com.rentalmobile.app` (mobile's
-`google-services.json` was hand-edited to `com.kerayego.app`), and neither project has an iOS app.
+Firebase (push only) uses **one project** since 2026-11-11: both apps are in `rentalmarketplave` (also
+the GCP project the backend runs in) — the Partner app as Android `com.kerayego.partner`; its old
+`kerayego-partner` project is no longer used. The backend (2026-11-11, deployed) sends every FCM token through one firebase-admin app in
+`rentalmarketplave`; `FIREBASE_PARTNER_PROJECT_ID` is gone. The Partner app had to be rebuilt with its
+new `google-services.json`. The customer app's registration is out of date: its Firebase app is Android
+`com.rentalmobile.app` (mobile's `google-services.json` was hand-edited to `com.kerayego.app`), and the
+project has no iOS app.
 iPhones don't use Firebase at all: since 2026-11-09 the backend sends iPhone tokens straight to Apple
 (APNs), but that is **switched off until the owner sets the APNs key**, so **iPhone push doesn't work
 yet**. Details: [`ENVIRONMENT_GUIDE.md`](ENVIRONMENT_GUIDE.md#firebase--push-notifications).
@@ -217,7 +218,7 @@ Three of the four repositories have unit test suites; none has end-to-end tests:
 |---|---|
 | `kerayego-backend` | Jest, 94 `*.spec.ts` files under `src/` (against a mocked Prisma client, `src/test-utils/prisma-mock.ts`). `npx jest` passed on 2026-11-09: 1,841 tests, 2 skipped (~44 s). `npm run test:e2e` points at `test/jest-e2e.json`, which doesn't exist. |
 | `kerayego-mobile` | Jest with `jest-expo`, 49 `*.test.ts(x)` files under `src/`, `npm test`. Pure logic and modules only; no component rendering or end-to-end tests. **The full run hangs**: `src/features/trips/offlineSync.test.ts` never finishes (60 s cap); the other 48 files pass, 883 tests (`npx jest --testPathIgnorePatterns offlineSync`, 2026-11-01). |
-| `kerayego-partner` | Jest with `jest-expo` (mobile's config), `*.test.ts` under `src/`, `npm test`. 57 test files, 705 tests, all passing (2026-11-09, ~11 s). Pure logic and API modules only; no component or end-to-end tests. |
+| `kerayego-partner` | Jest with `jest-expo` (mobile's config), `*.test.ts` under `src/`, `npm test`. 58 test files, 760 tests, all passing (2026-11-11, ~17 s). Pure logic and API modules only; no component or end-to-end tests. |
 | `kerayego-web` | None — no runner, no test files. |
 
 See [`DEVELOPMENT_WORKFLOW.md`](DEVELOPMENT_WORKFLOW.md#testing) for what this means in practice.

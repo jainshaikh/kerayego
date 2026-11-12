@@ -10,7 +10,9 @@ listing, not just "not mentioned").
 | Sign-in / sign-up by phone (number → WhatsApp code → signed in, or profile step for a new number; `POST /auth/phone/request`, `/verify`, `/register`, 2026-11-06) | ✅ (testing code `TEST_ACCOUNT_CODE` stands in for the WhatsApp code until Meta verification is done) | ✅ Full (profile step offers customer/business if the register page did) | ✅ Full (customer, role `USER`). **Partner app:** ✅ Full (role `PROVIDER`, then business setup). |
 | Sign-in by emailed code (`/auth/code/*`) — now only the "Sign in with email instead" backup; sign-up is phone-only on new screens | ✅ | ✅ Full | ✅ Full. **Partner app:** ✅ Full. |
 | Public rental browse (listings, filters, provider directory) | ✅ | ✅ Full | ✅ Full |
-| Rental booking request (create, view own, cancel) | ✅ | ✅ Full | ✅ Full |
+| Rental booking request (create, view own, cancel) | ✅ | 🟡 View own and cancel only — the web booking form is off since 2026-11-12 (plan A82); the car page sends customers to the app | ✅ Full |
+| Rental request route & package (stops, one way / round trip, passengers, fit check — plan §3c) | ✅ | 🟡 Shown, not sent: business portal Route section, driver jobs' stops with directions, customer dashboard route (no request form, A82) | ✅ Full (request sheet with estimate). **Partner app:** ✅ shown |
+| Weekly & monthly rental ("price to agree", A79/A84) | ✅ | ✅ Browse — a weekly & monthly page per city, no prices; the fleet form's switch; requests are sent in the app | ✅ Full ("Weekly & monthly" section + request). **Partner app:** ✅ the fleet switch |
 | Provider-side booking management (contact/accept/reject) | ✅ | ✅ Full (`(provider)/provider/inquiries`) | ❌ None |
 | Rental vehicle listing creation/management (fleet CRUD) | ✅ | ✅ Full (`(provider)/provider/vehicles`) | ❌ None — no screen and no rental-listing schema (the old dead `vehicle.schema.ts` was removed) |
 | Provider onboarding / showroom management | ✅ | ✅ Full (`(provider)/provider/profile`) | ❌ None |

@@ -44,14 +44,19 @@ requests. Unpushed work is invisible to the other developer and their agent.
   changing an endpoint, enum, Socket.IO event or upload type, open an issue saying what changes, so
   nobody builds a client against the old shape.
 
-### Branches and pull requests
+### Working on `main` (testing phase)
 
-- One branch per task, off an up-to-date `main`: `feat/<issue>-<short-name>`, `fix/…`, `docs/…`.
-- Merge into `main` only through a pull request the other developer reviews (`/code-review` helps).
-  Turn on branch protection for `main` (require a pull request) in all five repos.
-- A feature across repos gets one pull request per repo, linked to each other; merge the backend first —
-  merging it deploys it.
-- Push small and often.
+Owner decision 2026-11-11: **everyone works directly on `main` — no branches, no pull requests**, unless
+a developer asks for a branch for one piece of work. Per-task branches messed up the repos, and during the
+testing phase pushing to `main` is fine. Branches and pull requests may come back after testing; only the
+owner changes this.
+
+- `git pull` before you start and again right before you push; push small and often so the other
+  developer pulls your work early.
+- **A push to `kerayego-backend`'s `main` deploys to production** — run the backend tests, type-check
+  and lint first.
+- A feature across repos: push the backend first, then the clients that use the new contract.
+- Each developer pushes their own work; agents don't commit or push unless asked.
 
 ### Files that conflict
 
@@ -59,10 +64,9 @@ requests. Unpushed work is invisible to the other developer and their agent.
   name (root `CLAUDE.md` → Working as a team); on a conflict keep both sides.
 - **State sections** (backend §0, web §0, counts in these docs): after merging, re-check them against
   the code — don't pick a side.
-- **Prisma migrations:** before merging a pull request that adds one, bring the branch up to date with
-  `main`. If `main` gained a migration in the meantime, delete your unmerged migration folder and
-  create it again on top (the `--create-only` rule in `kerayego-backend/CLAUDE.md` still applies).
-  Never edit a migration that is already on `main`.
+- **Prisma migrations:** before pushing one, `git pull`. If `main` gained a migration in the meantime,
+  delete your unpushed migration folder and create it again on top (the `--create-only` rule in
+  `kerayego-backend/CLAUDE.md` still applies). Never edit a migration that is already on `main`.
 
 ## Running the platform locally
 
@@ -107,7 +111,7 @@ The practical verification available today:
   server + the running backend).
 - **Mobile**: `npm test` + `npm run type-check` + `npm run lint`, then manually exercise the feature in a
   running dev-client build against the running backend. The full `npm test` currently hangs on
-  `src/features/trips/offlineSync.test.ts` (the other 54 files pass) — run the relevant files by name
+  `src/features/trips/offlineSync.test.ts` (the other 57 files pass) — run the relevant files by name
   until that test is fixed.
 
 Do not claim a cross-app change "works" without having actually run the affected client(s) against a

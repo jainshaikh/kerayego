@@ -853,7 +853,22 @@ checking every Claude-owned item against live production and the code first. Loc
   `grande` (Karachi, titled "Corolla Altis Grande").
 - [ ] **Blocked on product/user decisions:** #8–#11 permanent carpool route pages (production has 0
   live trips); #27/#33 with-driver price inclusions (driver hours, fuel, km, overtime aren't modelled —
-  only 6/12-hour, weekly and monthly prices exist).
+  only 6/12-hour and daily prices exist; weeks and months have no price since 2026-11-11, plan A79).
+
+### Rental booking redesign — weekly & monthly pages (2026-11-12, plan A79/A82/A84)
+
+- [x] **Weekly & monthly page per city** `/rent-a-car/[city]/weekly-monthly` — the cars a business
+  switched on, "Price to agree", no prices anywhere; FAQPage + Breadcrumb JSON-LD; 404 when the city has
+  none (no thin pages); in the sitemap only for cities that have such cars; linked from the city hub
+  (chip, paragraph, FAQ), the car page's price card and the rewritten `monthly-vs-daily-car-rental` guide.
+  Live once the backend's 2026-11-11 changes are on production (the deployed backend rejects the filter,
+  so the pages 404 and the links stay hidden until then).
+- [x] **No week/month prices in public copy or structured data** (A79): car page, cards, city and
+  make/model copy and FAQs, homepage, root metadata, price-index methodology, the two rental guides.
+- [x] **Rental booking form off** (A82): the car page sends customers to the app; `/inquire` 308s to the
+  car page (already disallowed in robots). GA `begin_booking` / `complete_booking` no longer fire.
+- [x] **"This exact car"** with the car's own rating and rides on car pages and cards (A87, from the
+  listing's `carRating`; the Product `aggregateRating` uses the same figures).
 
 ---
 
@@ -931,3 +946,4 @@ _(Log further ad-hoc items the user raises in chat here, separate from the two t
 - 2026-11-06 — SEO Tracker sheet pass (Sprint 6): fixed the six sitemap 404s (hyphenated make/model slugs), honest sitemap lastmod (plus backend: page views no longer bump a listing's updatedAt), 308 for `?page=1`, homepage accuracy (#34), noindex on individual carpool trips (#35). Data fixes (#26 Prado price, #17 suzuku/grande) and carpool route pages / with-driver inclusions left for the user. Local only.
 - 2026-11-10 — (local, not deployed) Two city FAQs implied the customer drives, against the no-self-drive guardrail (B8): Karachi "Some are happy for you to drive out of Karachi" and Hyderabad "Can I drive a car rented in Hyderabad to Karachi?" (`lib/config/cityProfiles.ts`, also in each page's `FAQPage` JSON-LD) — reworded to "Every car comes with the provider's own driver, so it's up to the provider whether they'll make the trip"; Karachi's "having your own car" line likewise. Denial-only mentions ("no self-drive") kept, per the guardrail. Vehicle detail pages were being served from Next's Data Cache with no expiry (a `revalidate: false` that became `undefined`), so price/booked status could be stale for crawlers and visitors — now `cache: 'no-store'` (`lib/api/server.ts`). Verified on a local dev server against the live backend: both city pages 200 with the new wording.
 - 2026-11-10 (jainshaikh) — Docs only: moved how to read and use the shared SEO Tracker sheet and ChatGPT notes (URL, read/write method, verify-then-queue rule) from one developer's private Claude memory into this file's header, so both developers' agents follow it.
+- 2026-11-12 (jainshaikh) — Rental booking redesign on the website (plan §3c): a weekly & monthly page per city (no prices, A84), no week/month prices in any public copy or JSON-LD (A79), the web booking form switched off for the app (A82), "This exact car" ratings (A87), `monthly-vs-daily-car-rental` rewritten ("set prices for hours and days, a price you agree for weeks and months"), rental guides/FAQ/city FAQs describe requests in the app, the list-your-car guide's stale five-tab wizard fixed. Local, not deployed; the weekly & monthly pages need the backend's 2026-11-11 changes on production. Verified on a dev server against a mock of the new backend shapes: Karachi page 200 with the right cars and no prices, Lahore 404, sitemap lists only Karachi's.
